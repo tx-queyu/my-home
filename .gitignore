@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+.env.prod
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Android
+apps/android/.gradle/
+apps/android/local.properties
+apps/android/**/build/
+apps/android/**/*.iml
+apps/android/captures/
+apps/android/.cxx/
+
+# OS
+.DS_Store
+
+# Docker
+deploy/data/
+
+# Claude
+.claude/
+
+# Node (apps/landing)
+apps/landing/node_modules/
+apps/landing/.vitepress/cache/
+apps/landing/.vitepress/dist/
+apps/landing/public/*.apk
+
+# 误构建产物（vitepress build 跑错目录留下的）
+apps/android/.vitepress/
