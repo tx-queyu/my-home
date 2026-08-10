@@ -404,6 +404,16 @@ npm run preview                           # http://localhost:4173 看构建产�
 - **e2e（dev + prod 都验证通过）**：迁移 lexicon 150→1539、KET words 450→4617（1539×3）；幂等重跑 INSERT 0 0；孩子既有进度保留（touched 4 / mastered 1 不变，总量 150→1539）；new=总数-touched；learn mode 既有 150 优先；assess 15 题分层；新词 score=100 → mastery 0.5（initial clamp）落库
 - **部署**：prod 备份 → `docker exec -i myhome-postgres psql < ket_full_word_bank.sql` → rsync backend → 重建 backend 容器（seed_words.py 影响新装环境）
 
+### Phase 3.14（托业词库 0→2402 + 三门互动课，2026-08-10）— ✅ 已完成
+- **动机**：KET 之后补齐托业（家长自学主要场景）；ETS 官方不公布托业词表，无剑桥式权威清单
+- **词表来源**：三个公开词表并集——墨墨 TOEIC 990 核心词汇（1378 纯字母词）+ Pass the TOEIC Test 官方词表 PDF（1041）+ toeic-600 话题词集（562），去重 **2402 词**；多词短语/连字符条目（baggage claim、duty-free 等）未收录（拼写键盘仅 26 字母）
+- **字段生成**：20 批并行 LLM 生成（音标/释义/例句/译文）+ 校验脚本 0 问题；syllables 用 pyphen(en_US)；与 KET 重叠 226 词按**托业商务语境重新生成义项**（check→支票；账单、plant→工厂、capital→资本），仍共享 lexeme_id（能力跨教材互通）
+- **改动文件**：`core/seed_words.py` 泛化为多教材（`banks = {"KET": KET_WORDS, "托业": TOEIC_WORDS}`，先找空课程再 upsert lexicon 再插词）；新迁移 `migrations/toeic_word_bank.sql`（幂等：补建托业·学习/测评两门课 + 激活朗读/学习/测评 + lexicon upsert + 三课插词）
+- **课程现状**：托业原只有 7 门 inactive 占位课（学习/测评从未被插入——v0.15 的 LEARNING_METHODS 扩充只经迁移 SQL 落了 KET），本次补建 2 门并激活 3 门互动课
+- **纯数据变更**：无 API/schema 变化，无 Android 改动（sessionType 只认 subject+learning_method，自学添加教材/能力中心自动出现托业），**未 bump 版本**
+- **e2e（dev + prod 都验证通过）**：迁移 courses +2 / UPDATE 1（激活朗读）/ lexicon +2176（2402−226 重叠）→ 3715 / words +7206（2402×3）；幂等重跑全 0；available 教材出现托业（3 课）；添加教材 → /me/textbooks 托业 2402/0；assess 15 题分层；新词 score=100 → mastery 0.5 → touched 1；check 在 KET/托业 6 门课共享同一 lexeme_id
+- **部署**：prod 备份 → 迁移 → rsync backend → 重建 backend 容器
+
 ### Phase 4-5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
 - **Phase 4**：学科成绩/学习时长统计 + 每日打卡（`Grade` / `StudySession` / `DailyCheckinDefinition` / `DailyCheckinLog`，打卡通过 `PointTransaction` source=adjustment 自动加积分）
 - **Phase 5**：容器化后端 + Alembic 迁移 + iOS/鸿蒙工程评估
