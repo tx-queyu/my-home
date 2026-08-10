@@ -428,7 +428,20 @@ npm run preview                           # http://localhost:4173 看构建产�
 - **纯数据变更**：无 API/schema 变化，无 Android 改动（sessionType 只认 subject+learning_method，自学添加教材/能力中心自动出现 PEP），**未 bump 版本**
 - **e2e（dev + prod 都验证通过）**：courses 230→326（+96）/ english_active 6→66（+60 = 20 教材 × 3 method）/ lexicon 3715→5663（+1948）/ words 11823→26970（+15147 = 5049×3）；幂等重跑全 0；ruler 在 KET/PEP 6 门课共享同一 lexeme_id；PEP ruler 50 分 → mastery 0.5，KET ruler 100 分 → mastery 0.65（EMA 跨教材累积）；assess 15 题分层；422/404/400 错误码齐全
 - **部署**：prod 备份 4.2MB → 迁移 → rsync backend → 重建 backend 容器
-- **遗留**：雅思词库因模型配额临时受限（403 You've reached your usage limit），本期未上线，配额恢复后另起任务（4321 词，已抓 lzrknglsh IELTS-4000.txt，3/36 批次已生成）
+
+### Phase 3.16（雅思词库 0→4321 + 三门互动课，2026-08-10）— ✅ 已完成
+- **动机**：Phase 3.15 因 Kimi 5h 配额限流未上线的雅思,配额恢复后补齐
+- **词表来源**：lzrknglsh IELTS-4000.txt 共 4321 词(纯字母条目;多词短语/连字符未收录——拼写键盘仅 26 字母)
+- **字段策略**(同 PEP):
+  - 275 与 KET 重叠 → 复用 KET tuple(校园语境)
+  - 1183 与 TOEIC-only 重叠 → 复用 TOEIC tuple(商务义项)
+  - 2863 净新词 → LLM 并行生成(36 批 × ~120 词/批,中间被 5h 配额 429 打断两轮,模型切换 + 波次缩到 5-8 并发后全部完成),学术/教育/科技/社会场景,A2-B2 难度,5-20 词例句(比 PEP 6-12 放宽)
+  - 全部共享同一 lexeme_id → 能力跨教材(KET/托业/PEP/雅思 4 套)互通
+- **改动文件**:`core/seed_words.py` 加 `IELTS_WORDS: list[tuple]`(4321 行,字母序)+ banks dict 加 `"雅思": IELTS_WORDS`;新迁移 `migrations/ielts_word_bank.sql`(幂等:插 雅思·学习/测评 2 门 + 激活 朗读/学习/测评 + lexicon upsert + 3 active 课插词)
+- **纯数据变更**:无 API/schema 变化,无 Android 改动,**未 bump 版本**
+- **e2e(dev + prod 都验证通过)**:courses_ielts 7→9(+2 学习/测评),lexicon 5663→7804(+2141 净新),words 26970→39933(+12963 = 4321×3);幂等重跑全 0;available 教材 23 册齐;添加雅思教材 → /me/textbooks 雅思 4321/0;learn 10 词(新词优先);assess 15 词;score=100 → mastery 0.5;abandon 在 托业/雅思/高中选必三 9 门课共享同一 lexeme_id;422/404/400 错误码齐全
+- **部署**:prod 备份 2.7MB → 迁移 → rsync backend → 重建 backend 容器
+- **batch_22 教训**:第一波 32 并发触发 Kimi 429 + 5h 配额,后续 5-8 并发 + 等 5h 重置窗口;`batch_26` 重启时 agent 启动后无回执消失,直接重启新 agent 即可,不等死信
 
 ### Phase 4-5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
 - **Phase 4**：学科成绩/学习时长统计 + 每日打卡（`Grade` / `StudySession` / `DailyCheckinDefinition` / `DailyCheckinLog`，打卡通过 `PointTransaction` source=adjustment 自动加积分）
