@@ -395,6 +395,15 @@ npm run preview                           # http://localhost:4173 看构建产�
 - **0.16.2 发布（2026-08-05）**：bump versionCode 65→66, versionName 0.16.1→0.16.2；rsync backend + landing public → 重建 backend + landing 容器；aapt2 验证 versionCode=66；prod `/version.json` 返回 0.16.2；APK 32MB
 - 手动 e2e 待真机跑（能力中心教材 tab 切换 + 单词明细联动；教育 tab 孩子能力卡单 KET pill）
 
+### Phase 3.13（KET 全量词库 150→1539，2026-08-10）— ✅ 已完成
+- **动机**：v0.15.0 起 KET 三课只有 150 词，远低于剑桥 A2 Key 实际考核范围
+- **词表来源**：剑桥官方 A2 Key (2020) 词表 PDF（alphabetical 主表 1431 个纯字母词条 + Appendix 1 词集 98 词）+ 既有 150 词中官方表外 10 词保留（beer/cherry/narrow/peach/pig/smell/taste/thick/touch/wine）→ 合计 1539 词；111 个多词短语/含符号条目（alarm clock、a.m.、o'clock 等）未收录——App 拼写键盘仅 26 字母无法输入
+- **字段生成**：syllables 用 pyphen(en_US)（与既有 150 一致）；phonetic/meaning_cn/例句/译文 LLM 批量生成 + 脚本校验（格式/CJK/音标/例句含词/去重）
+- **改动文件**：`core/seed_words.py` 全量重写（1645 行 1539 元组；既有 150 词保持 sort 1-150 原样，新词按字母序 151-1539）；新迁移 `migrations/ket_full_word_bank.sql`（幂等：lexicon 按 spelling upsert + 三门 KET 课 WHERE NOT EXISTS 插词，同 lexeme_id 共享）
+- **纯数据变更**：无 API/schema 变化，无 Android 改动，**未 bump 版本**（versionCode 仍 66 / 0.16.2）
+- **e2e（dev + prod 都验证通过）**：迁移 lexicon 150→1539、KET words 450→4617（1539×3）；幂等重跑 INSERT 0 0；孩子既有进度保留（touched 4 / mastered 1 不变，总量 150→1539）；new=总数-touched；learn mode 既有 150 优先；assess 15 题分层；新词 score=100 → mastery 0.5（initial clamp）落库
+- **部署**：prod 备份 → `docker exec -i myhome-postgres psql < ket_full_word_bank.sql` → rsync backend → 重建 backend 容器（seed_words.py 影响新装环境）
+
 ### Phase 4-5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
 - **Phase 4**：学科成绩/学习时长统计 + 每日打卡（`Grade` / `StudySession` / `DailyCheckinDefinition` / `DailyCheckinLog`，打卡通过 `PointTransaction` source=adjustment 自动加积分）
 - **Phase 5**：容器化后端 + Alembic 迁移 + iOS/鸿蒙工程评估
