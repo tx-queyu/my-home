@@ -2,10 +2,15 @@
 
 2 层结构：subject（学科）→ textbook（教材）→ learning_method（学习方式）。
 
-英语：27 教材 × 9 方式 = 243 条（小学人教版 1-6 年级上下 12 + 初中人教版 7-9 年级上下 6 +
-高中人教版高一-高三上下 6 + KET/托业/雅思 3）。
+英语：23 教材 × 9 方式 = 207 条（小学人教版三-六年级上下 8 + 初中人教版七-九年级 5 +
+高中人教版必修 1-3 / 选择性必修 1-4 共 7 + KET/托业/雅思 3）。朗读/学习/测评 active（有词库），
+其余 6 种学习方式 inactive 占位。
 
 其他 12 学科保留旧 4 条左右课程作为占位（textbook="默认"），待后续按 2 层结构重新设计。
+
+注：v0.16.3 之前的 dev/prod 数据库还残留 24 个旧占位英语教材（小学一/二年级上下、
+初中九年级上下、高中高一-高三上下 共 24 × 7 method = 168 行，全 inactive），迁移 SQL
+不删除——保持停用即可。
 """
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,20 +30,25 @@ LEARNING_METHODS: list[tuple[str, int]] = [
     ("测试", 15),
 ]
 
-# 英语教材（27 个，按难度递增）
+# 已支持词库、可互动的学习方式（朗读=ISE 音频评分、学习=卡片+拼写、测评=全拼写考核）
+INTERACTIVE_METHODS = {"朗读", "学习", "测评"}
+
+# 英语教材（23 个，按难度递增）
 ENGLISH_TEXTBOOKS: list[str] = [
-    "小学人教版一年级上", "小学人教版一年级下",
-    "小学人教版二年级上", "小学人教版二年级下",
+    # 小学人教版（PEP）三年级起点，8 册
     "小学人教版三年级上", "小学人教版三年级下",
     "小学人教版四年级上", "小学人教版四年级下",
     "小学人教版五年级上", "小学人教版五年级下",
     "小学人教版六年级上", "小学人教版六年级下",
+    # 初中人教版（Go for it!）5 册（九年级合订为全一册）
     "初中人教版七年级上", "初中人教版七年级下",
     "初中人教版八年级上", "初中人教版八年级下",
-    "初中人教版九年级上", "初中人教版九年级下",
-    "高中人教版高一上", "高中人教版高一下",
-    "高中人教版高二上", "高中人教版高二下",
-    "高中人教版高三上", "高中人教版高三下",
+    "初中人教版九年级全",
+    # 高中人教版（2019 版）必修 1-3 + 选择性必修 1-4，共 7 册
+    "高中人教版必修一", "高中人教版必修二", "高中人教版必修三",
+    "高中人教版选择性必修一", "高中人教版选择性必修二",
+    "高中人教版选择性必修三", "高中人教版选择性必修四",
+    # 标化考试
     "KET", "托业", "雅思",
 ]
 
@@ -97,26 +107,27 @@ LEGACY_PLACEHOLDER_COURSES: list[tuple[str, str, int]] = [
 ]
 
 
-def _build_seed_courses() -> list[tuple[str, str, str, str | None, int, int]]:
-    """生成 SEED_COURSES：(subject, textbook, learning_method, description, default_points, sort_order)."""
-    rows: list[tuple[str, str, str, str | None, int, int]] = []
+def _build_seed_courses() -> list[tuple[str, str, str, str | None, int, int, bool]]:
+    """生成 SEED_COURSES：(subject, textbook, learning_method, description, default_points, sort_order, is_active)."""
+    rows: list[tuple[str, str, str, str | None, int, int, bool]] = []
     sort = 1
-    # 英语 189 条
+    # 英语 23 教材 × 9 方式 = 207 条；朗读/学习/测评 active（有词库），其余 inactive 占位
     for textbook in ENGLISH_TEXTBOOKS:
         for method, points in LEARNING_METHODS:
-            rows.append(("英语", textbook, method, None, points, sort))
+            is_active = method in INTERACTIVE_METHODS
+            rows.append(("英语", textbook, method, None, points, sort, is_active))
             sort += 1
-    # 其他 12 学科占位（按学科分组，每学科内 sort_order 从 1 重计）
+    # 其他 12 学科占位（按学科分组，每学科内 sort_order 从 1 重计），全部 active（任务模板）
     legacy_by_subject: dict[str, list[tuple[str, int]]] = {}
     for subject, method, points in LEGACY_PLACEHOLDER_COURSES:
         legacy_by_subject.setdefault(subject, []).append((method, points))
     for subject, items in legacy_by_subject.items():
         for idx, (method, points) in enumerate(items, start=1):
-            rows.append((subject, "默认", method, None, points, idx))
+            rows.append((subject, "默认", method, None, points, idx, True))
     return rows
 
 
-SEED_COURSES: list[tuple[str, str, str, str | None, int, int]] = _build_seed_courses()
+SEED_COURSES: list[tuple[str, str, str, str | None, int, int, bool]] = _build_seed_courses()
 
 
 async def seed_courses_if_empty(db: AsyncSession) -> int:
@@ -132,8 +143,9 @@ async def seed_courses_if_empty(db: AsyncSession) -> int:
             description=description,
             default_points=default_points,
             sort_order=sort_order,
+            is_active=is_active,
         )
-        for subject, textbook, learning_method, description, default_points, sort_order in SEED_COURSES
+        for subject, textbook, learning_method, description, default_points, sort_order, is_active in SEED_COURSES
     ])
     await db.commit()
     return len(SEED_COURSES)

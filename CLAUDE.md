@@ -414,6 +414,22 @@ npm run preview                           # http://localhost:4173 看构建产�
 - **e2e（dev + prod 都验证通过）**：迁移 courses +2 / UPDATE 1（激活朗读）/ lexicon +2176（2402−226 重叠）→ 3715 / words +7206（2402×3）；幂等重跑全 0；available 教材出现托业（3 课）；添加教材 → /me/textbooks 托业 2402/0；assess 15 题分层；新词 score=100 → mastery 0.5 → touched 1；check 在 KET/托业 6 门课共享同一 lexeme_id
 - **部署**：prod 备份 → 迁移 → rsync backend → 重建 backend 容器
 
+### Phase 3.15（人教版 20 册词库 0→5049 + 真实教材结构，2026-08-10）— ✅ 已完成
+- **动机**：托业上线后补齐人教版（PEP）教材——孩子校内主战场，20 册覆盖小学三年级到高中选择性必修四
+- **教材结构重构**：从 24 个旧占位（小学一/二年级上下、初中九年级上下、高中高一-高三上下 共 24 × 7 method = 168 行 inactive）改为 20 册真实结构——小学三起点 8 册（PEP）+ 初中 5 册（Go for it!，九年级合订为全一册）+ 高中 7 册（2019 版必修 1-3 + 选择性必修 1-4）。旧占位教材**保持 inactive 不删**（迁移 SQL 不动它们）。`seed_courses.py` ENGLISH_TEXTBOOKS 改 23 册（20 PEP + KET/托业/雅思），新增 `INTERACTIVE_METHODS = {"朗读","学习","测评"}` 决定 active 状态
+- **词表来源**：cyforkk/pep-english-words (MIT) 单元 → 单词 JSON；20 册共 5049 词条次（4132 去重）。多词短语/含符号条目未收录（拼写键盘仅 26 字母）
+- **字段策略**（关键决策）：4132 去重词中
+  - 1359 与 KET 重叠 → 复用 KET tuple（校园语境友好，已校验）
+  - 1043 与 TOEIC-only 重叠 → 复用 TOEIC tuple（商务义项，后续可重生成校园语境版）
+  - 1948 净新词 → LLM 并行生成（17 批 × ~115 词/批），校园/家庭/日常场景，A2-B1 难度，6-12 词例句
+  - 全部共享同一 lexeme_id → 能力跨教材（KET/托业/PEP）互通
+- **改动文件**：`core/seed_courses.py` ENGLISH_TEXTBOOKS 改 23 册 + is_active 按 INTERACTIVE_METHODS 决定；`core/seed_words.py` 加 `PEP_BANKS: dict[textbook, list[tuple]]`（5049 行）+ `banks = {**{"KET","托业"}, **PEP_BANKS}`；新迁移 `migrations/pep_word_banks.sql`（幂等：插 8 新教材 × 9 method + 12 overlap 教材补 学习/测评 + 激活 朗读/学习/测评 + lexicon upsert + 每教材 × 3 active 课插词）
+- **坑（迁移 SQL）**：PostgreSQL VALUES 子句的 boolean 字面量必须用 `TRUE`/`FALSE`,**不**接受 `t::boolean`/`f::boolean`（首跑 `ERROR: column "t" does not exist`）；修正后 INSERT 96 课程 / UPDATE 12 / INSERT 1948 lexicon / INSERT 15147 words
+- **纯数据变更**：无 API/schema 变化，无 Android 改动（sessionType 只认 subject+learning_method，自学添加教材/能力中心自动出现 PEP），**未 bump 版本**
+- **e2e（dev + prod 都验证通过）**：courses 230→326（+96）/ english_active 6→66（+60 = 20 教材 × 3 method）/ lexicon 3715→5663（+1948）/ words 11823→26970（+15147 = 5049×3）；幂等重跑全 0；ruler 在 KET/PEP 6 门课共享同一 lexeme_id；PEP ruler 50 分 → mastery 0.5，KET ruler 100 分 → mastery 0.65（EMA 跨教材累积）；assess 15 题分层；422/404/400 错误码齐全
+- **部署**：prod 备份 4.2MB → 迁移 → rsync backend → 重建 backend 容器
+- **遗留**：雅思词库因模型配额临时受限（403 You've reached your usage limit），本期未上线，配额恢复后另起任务（4321 词，已抓 lzrknglsh IELTS-4000.txt，3/36 批次已生成）
+
 ### Phase 4-5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
 - **Phase 4**：学科成绩/学习时长统计 + 每日打卡（`Grade` / `StudySession` / `DailyCheckinDefinition` / `DailyCheckinLog`，打卡通过 `PointTransaction` source=adjustment 自动加积分）
 - **Phase 5**：容器化后端 + Alembic 迁移 + iOS/鸿蒙工程评估
