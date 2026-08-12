@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
@@ -196,8 +197,16 @@ fun ParentEducationScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        options.forEach { option ->
+                    // v0.16.1:教材可能很多(KET/托业/雅思 + 20 册 PEP),用有界高度
+                    // 的 LazyColumn 让列表可滚动,否则 Column 撑出屏外底部的教材点不到。
+                    // 与 FamilyDetailScreen.AddMemberDialog 同一模式。
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(options, key = { it.subject to it.textbook }) { option ->
                             Surface(
                                 onClick = {
                                     vm.addTextbook(option.subject, option.textbook)
