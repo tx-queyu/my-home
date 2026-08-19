@@ -443,9 +443,26 @@ npm run preview                           # http://localhost:4173 看构建产�
 - **部署**:prod 备份 2.7MB → 迁移 → rsync backend → 重建 backend 容器
 - **batch_22 教训**:第一波 32 并发触发 Kimi 429 + 5h 配额,后续 5-8 并发 + 等 5h 重置窗口;`batch_26` 重启时 agent 启动后无回执消失,直接重启新 agent 即可,不等死信
 
-### Phase 4-5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
-- **Phase 4**：学科成绩/学习时长统计 + 每日打卡（`Grade` / `StudySession` / `DailyCheckinDefinition` / `DailyCheckinLog`，打卡通过 `PointTransaction` source=adjustment 自动加积分）
-- **Phase 5**：容器化后端 + Alembic 迁移 + iOS/鸿蒙工程评估
+### Phase 4（学科成绩 + 学习时长统计 + 每日打卡 v0.17.0）— ✅ 已完成
+- **动机**：补齐教育模块三大件——考试成绩记录、学习时长统计、习惯养成打卡。设计决策（与用户确认）：打卡复用已有 Habit 后端（原计划的 DailyCheckinDefinition/Log 未建）；成绩单条录入；时长自动埋点不给积分；入口全放教育 tab
+- **后端**（3 个 router，16→19 个）：
+  - `api/habits.py`（已有未部署，本次上线）：家长建习惯（name 唯一/points/streak_cap/is_active）+ 全员打卡 `POST /{id}/log`（streak=昨日+1 断签归 1，积分 = min(streak,cap)*points，`PointSource.checkin` 三件套）+ `GET /logs` 双视角；`ux_habit_logs_habit_user_date` 按天唯一
+  - `api/grades.py`（新）：`Grade`（family_id + subject String(32) 自由文本不 FK + score/score_full Float + exam_name/exam_date/note + assignee_user_id CASCADE NOT NULL + created_by SET NULL）；POST/PUT/DELETE require_parent（assignee 同家庭校验 404 `assignee_not_found`）；GET 双视角；score>score_full → 422 `score_exceeds_full`（PUT 时应用后组合校验 400）；无汇总端点（列表页内存聚合）
+  - `api/study_sessions.py`（新）：`StudySession`（user_id + 冗余 subject/textbook/learning_method 三 String 不 FK course_id + session_type/source String + Literal 校验 + duration_seconds ge=1 le=86400 + session_date）；POST 任何登录用户（user_id 服务端取）；`GET /stats` 服务端聚合（today/week(周一)/total + group_by subject,textbook 降序）；`GET` 明细 limit 50。**本表无 family_id**——跨家庭防护靠 `_resolve_target_user` 显式校验（孩子传他人 403 parent_only / 家长跨家庭 404 child_not_found）
+  - 迁移：`habits.sql`（含 `ALTER TYPE point_source ADD VALUE 'checkin'`——**必须先于新后端部署**，create_all 不给已有 enum 补值）+ `phase4_grades_study_sessions.sql`（幂等 CREATE TABLE×2 + INDEX×4）
+- **Android**（5 新屏 + 3 repo + 埋点）：
+  - `ui/education/Habit{List,Form}{Screen,ViewModel}.kt` — 双视角打卡页（habit 卡 trailing=打卡 pill/✓/spinner，subtitle=`连续N天 · 每次+X积分(封顶cap天)`；家长额外新建/编辑入口 + 最近打卡 20 条；409→toast 今天已打过）+ CRUD 表单（编辑模式含删除按钮）
+  - `ui/education/Grade{List,Form}{Screen,ViewModel}.kt` — 成绩列表（家长成员 chips 内存过滤 + 汇总卡「共N条·平均得分率%·最近」+ subject groupBy 分组组头平均分）+ 表单（学科 ExposedDropdownMenu 可编辑下拉取 courseRepo.list() distinct subject 13 学科；分数/满分小数过滤 + score<=full 校验；DatePicker；单人家庭默认选第一个孩子）
+  - `ui/education/StudyStats{Screen,ViewModel}.kt` — 家长成员 chips（我自己+各孩子切换重请求）+ 今日/本周/累计三列大数字卡 + 按教材分布 + 最近学习 10 条（reading/learn/quiz→中文）
+  - 入口：ChildEducationScreen 加「每日打卡」卡（HabitCheckinCard，VM 并行拉 habits 算「今日 X/Y」失败降级）；ParentEducationScreen 教育 tab 顶部卡追加 成绩管理(Grade)/学习时长(Schedule)/习惯打卡(CheckCircle) 三行
+  - **埋点**（Learn/Quiz/Reading 三 VM 同模式）：`sessionStartMs = SystemClock.elapsedRealtime()` 记起点 → 收尾（Learn/Quiz 进 SUMMARY/REPORT、Reading finishFlow 两分支 + finishTask 成功）时 fire-and-forget `studyRepo.report(...)`，<10s 过滤，`sessionReported` 防重，失败静默绝不影响结算；UiState 补 subject/textbook/learningMethod 三字段；source 按 taskId/selfStudy 分流 task/self_study/experience
+  - Routes：HABITS/HABIT_FORM/GRADES/GRADE_FORM/STUDY_STATS 五条 + habitForm/gradeForm helper；两 FORM 家长守卫（照搬 TASK_FORM）；FriendlyError 加 habit_not_found/habit_name_taken/habit_inactive/already_checked_in_today/grade_not_found/score_exceeds_full
+- **e2e（prod 全路径验证通过）**：Grade（201→403 孩子建→404 assignee 跨家庭/不存在→双视角列表→family 隔离 B 不见 A→PUT/DELETE→422）；StudySession（201/422×3/stats today=600/403/404/跨周 session_date/日期过滤）；Habits（create→list streak 注入→打卡+2 分→409 二次→logs→PUT→points balance=2 + source=checkin 流水→DELETE）；DB 4 表落库；测试数据已清理
+- **0.17.0 发布（2026-08-19）**：versionCode 68→69；本地（Linux 检出点，低内存 gradle 配置）assembleDebug/assembleStaging 成功（32MB）；commit 08222bb push origin/main；ECS：pg_dump 14MB 备份 → habits.sql（enum 补 checkin）→ phase4 SQL → tar/scp 同步 → 重建 backend + landing 容器；`/version.json` 0.17.0；aapt2 验 versionCode=69；测试数据清理后 grades/study/habits 全 0
+- 手动 e2e 待真机跑（孩子打卡+积分增长；家长录/改/删成绩；学完课 stats 增长；家长自学 stats 增长；中途退出不变；断网不崩）
+
+### Phase 5（未实现）— 见 `/Users/terry/.claude/plans/silly-dazzling-valley.md`
+- 容器化后端 + Alembic 迁移 + iOS/鸿蒙工程评估
 
 ## 参考工程关联
 
