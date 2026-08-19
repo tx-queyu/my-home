@@ -1,10 +1,13 @@
 package com.myhome.ui.education
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.myhome.net.dto.CourseExperienceResult
+import com.myhome.net.dto.StudySessionReportRequest
 import com.myhome.net.dto.WordDto
 import com.myhome.repo.CourseRepository
+import com.myhome.repo.StudySessionRepository
 import com.myhome.repo.TaskRepository
 import com.myhome.util.ReadingTtsPlayer
 import com.myhome.util.friendlyError
@@ -31,6 +34,10 @@ data class LearnSessionUiState(
     val error: String? = null,
     val courseLabel: String = "",
     val courseId: String = "",
+    // v0.17.0 学习时长埋点：course 元数据（上报 subject/textbook/learningMethod）
+    val subject: String = "",
+    val textbook: String = "",
+    val learningMethod: String = "",
     val words: List<WordDto> = emptyList(),
     val currentIndex: Int = 0,
     val phase: LearnPhase = LearnPhase.LOADING,
@@ -58,6 +65,7 @@ data class LearnSessionUiState(
 class LearnSessionViewModel @Inject constructor(
     private val repo: CourseRepository,
     private val taskRepo: TaskRepository,
+    private val studyRepo: StudySessionRepository,
     val ttsPlayer: ReadingTtsPlayer,
 ) : ViewModel() {
 
@@ -65,6 +73,10 @@ class LearnSessionViewModel @Inject constructor(
     val ui: StateFlow<LearnSessionUiState> = _ui.asStateFlow()
 
     private var loadedKey: String? = null
+
+    // v0.17.0 学习时长埋点：进入首个互动 phase 时记起点（elapsedRealtime 免系统时间跳变）
+    private var sessionStartMs: Long? = null
+    private var sessionReported = false
 
     fun load(courseId: String) = start(courseId, taskId = null)
 
@@ -101,10 +113,15 @@ class LearnSessionViewModel @Inject constructor(
                     }
                     return@onSuccess
                 }
+                sessionStartMs = SystemClock.elapsedRealtime()
+                sessionReported = false
                 _ui.update {
                     it.copy(
                         loading = false,
                         courseLabel = "${course.textbook} · ${course.learningMethod}",
+                        subject = course.subject,
+                        textbook = course.textbook,
+                        learningMethod = course.learningMethod,
                         words = words,
                         currentIndex = 0,
                         phase = LearnPhase.STUDY,
@@ -163,6 +180,7 @@ class LearnSessionViewModel @Inject constructor(
         val next = s.currentIndex + 1
         if (next >= s.words.size) {
             _ui.update { it.copy(phase = LearnPhase.SUMMARY) }
+            reportStudySession(s)
             if (s.taskId == null && !s.selfStudy) finishExperience()
         } else {
             _ui.update { it.copy(currentIndex = next, phase = LearnPhase.STUDY, spellInput = "") }
@@ -190,6 +208,7 @@ class LearnSessionViewModel @Inject constructor(
                             earnedPoints = s.taskPoints ?: 0,
                         )
                     }
+                    reportStudySession(s)
                 }
                 .onFailure { e ->
                     _ui.update {
@@ -228,6 +247,37 @@ class LearnSessionViewModel @Inject constructor(
         _ui.update { it.copy(toast = null) }
     }
 
+    /**
+     * v0.17.0 学习时长埋点：session 自然完成时上报（fire-and-forget）。
+     * <10 秒过滤误触；失败静默绝不影响结算/UI；sessionReported 防任务模式重复上报。
+     */
+    private fun reportStudySession(s: LearnSessionUiState) {
+        val start = sessionStartMs ?: return
+        if (sessionReported) return
+        val durationSec = ((SystemClock.elapsedRealtime() - start) / 1000).toInt()
+        if (durationSec < MIN_REPORT_SECONDS) return
+        if (s.subject.isBlank() || s.textbook.isBlank()) return
+        sessionReported = true
+        viewModelScope.launch {
+            runCatching {
+                studyRepo.report(
+                    StudySessionReportRequest(
+                        subject = s.subject,
+                        textbook = s.textbook,
+                        learningMethod = s.learningMethod,
+                        sessionType = "learn",
+                        source = when {
+                            s.taskId != null -> "task"
+                            s.selfStudy -> "self_study"
+                            else -> "experience"
+                        },
+                        durationSeconds = durationSec,
+                    )
+                )
+            }.onFailure { /* 静默：埋点失败不影响任何流程 */ }
+        }
+    }
+
     override fun onCleared() {
         ttsPlayer.release()
         super.onCleared()
@@ -237,5 +287,6 @@ class LearnSessionViewModel @Inject constructor(
         const val WORDS_PER_SESSION = 10
         const val SCORE_CORRECT = 50
         const val SCORE_WRONG = 20
+        const val MIN_REPORT_SECONDS = 10
     }
 }

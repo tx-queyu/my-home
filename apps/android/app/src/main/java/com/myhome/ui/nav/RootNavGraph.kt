@@ -24,6 +24,10 @@ import com.myhome.ui.admin.DeviceOwnerSetupScreen
 import com.myhome.ui.devices.DeviceDetailScreen
 import com.myhome.ui.devices.DeviceListScreen
 import com.myhome.ui.education.ChildEducationScreen
+import com.myhome.ui.education.GradeFormScreen
+import com.myhome.ui.education.GradeListScreen
+import com.myhome.ui.education.HabitFormScreen
+import com.myhome.ui.education.HabitListScreen
 import com.myhome.ui.education.LearnSessionScreen
 import com.myhome.ui.education.ParentEducationScreen
 import com.myhome.ui.education.PointsScreen
@@ -33,6 +37,7 @@ import com.myhome.ui.education.RedemptionListScreen
 import com.myhome.ui.education.RewardFormScreen
 import com.myhome.ui.education.RewardListScreen
 import com.myhome.ui.education.SkillCenterMode
+import com.myhome.ui.education.StudyStatsScreen
 import com.myhome.ui.education.SkillCenterScreen
 import com.myhome.ui.education.TaskDetailScreen
 import com.myhome.ui.education.TaskFormScreen
@@ -198,6 +203,9 @@ fun RootNavGraph() {
                                     navController.navigate(Routes.quizSessionSelf(id))
                             }
                         },
+                        onOpenGrades = { navController.navigate(Routes.GRADES) },
+                        onOpenStudyStats = { navController.navigate(Routes.STUDY_STATS) },
+                        onOpenHabits = { navController.navigate(Routes.HABITS) },
                     )
                 } else {
                     ChildEducationScreen(
@@ -205,6 +213,7 @@ fun RootNavGraph() {
                         onOpenPoints = { navController.navigate(Routes.POINTS) },
                         onOpenRewards = { navController.navigate(Routes.REWARDS) },
                         onOpenSkillCenter = { navController.navigate(Routes.SKILL_CENTER) },
+                        onOpenHabits = { navController.navigate(Routes.HABITS) },
                     )
                 }
             }
@@ -638,6 +647,71 @@ fun RootNavGraph() {
                     courseId = id,
                     onBack = { navController.popBackStack() },
                     selfStudy = true,
+                )
+            }
+            // ---- Phase 4（v0.17.0）：每日打卡 / 学科成绩 / 学习时长 ----
+            composable(Routes.HABITS) {
+                HabitListScreen(
+                    isParent = isParent,
+                    onBack = { navController.popBackStack() },
+                    onOpenForm = { id -> navController.navigate(Routes.habitForm(id)) },
+                )
+            }
+            composable(
+                Routes.HABIT_FORM,
+                arguments = listOf(navArgument("id") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }),
+            ) { entry ->
+                val raw = entry.arguments?.getString("id").orEmpty()
+                val id = raw.takeIf { it.isNotBlank() }
+                if (!isParent) {
+                    LaunchedEffect(Unit) {
+                        Toast.makeText(context, "仅家长可操作", Toast.LENGTH_SHORT).show()
+                        navController.popBackStack()
+                    }
+                } else {
+                    HabitFormScreen(
+                        habitId = id,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(Routes.GRADES) {
+                GradeListScreen(
+                    isParent = isParent,
+                    onBack = { navController.popBackStack() },
+                    onOpenForm = { id -> navController.navigate(Routes.gradeForm(id)) },
+                )
+            }
+            composable(
+                Routes.GRADE_FORM,
+                arguments = listOf(navArgument("id") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }),
+            ) { entry ->
+                val raw = entry.arguments?.getString("id").orEmpty()
+                val id = raw.takeIf { it.isNotBlank() }
+                if (!isParent) {
+                    LaunchedEffect(Unit) {
+                        Toast.makeText(context, "仅家长可操作", Toast.LENGTH_SHORT).show()
+                        navController.popBackStack()
+                    }
+                } else {
+                    GradeFormScreen(
+                        gradeId = id,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(Routes.STUDY_STATS) {
+                StudyStatsScreen(
+                    isParent = isParent,
+                    onBack = { navController.popBackStack() },
                 )
             }
             // ---- 我的：改绑手机/邮箱/改密码 ----

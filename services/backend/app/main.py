@@ -11,11 +11,14 @@ from app.api import (
     devices,
     email_configs,
     families,
+    grades,
+    habits,
     points,
     rewards,
     self_study,
     skills,
     sms_configs,
+    study_sessions,
     system,
     tasks,
     tts,
@@ -52,6 +55,9 @@ app.include_router(appliances.router)
 app.include_router(courses.router)
 app.include_router(admin_courses.router)
 app.include_router(tasks.router)
+app.include_router(habits.router)
+app.include_router(grades.router)
+app.include_router(study_sessions.router)
 app.include_router(points.router)
 app.include_router(rewards.router)
 app.include_router(skills.router)

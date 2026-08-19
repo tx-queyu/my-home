@@ -58,6 +58,13 @@ object Routes {
     const val SKILL_CENTER = "skill_center"
     const val SKILL_CENTER_CHILD = "skill_center_child/{childId}/{childName}"
 
+    // Phase 4（v0.17.0）：每日打卡 / 学科成绩 / 学习时长
+    const val HABITS = "habits"
+    const val HABIT_FORM = "habit_form?id={id}"
+    const val GRADES = "grades"
+    const val GRADE_FORM = "grade_form?id={id}"
+    const val STUDY_STATS = "study_stats"
+
     fun applianceDetail(id: String) = "appliance_detail/$id"
     fun applianceForm(id: String? = null) =
         if (id == null) "appliance_form?id=" else "appliance_form?id=$id"
@@ -89,4 +96,8 @@ object Routes {
     fun quizSessionSelf(id: String) = "quiz_session_self/$id"
     fun skillCenterChild(childId: String, childName: String) =
         "skill_center_child/$childId/${android.net.Uri.encode(childName)}"
+    fun habitForm(id: String? = null) =
+        if (id == null) "habit_form?id=" else "habit_form?id=$id"
+    fun gradeForm(id: String? = null) =
+        if (id == null) "grade_form?id=" else "grade_form?id=$id"
 }

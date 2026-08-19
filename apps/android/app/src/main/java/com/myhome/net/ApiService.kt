@@ -46,6 +46,17 @@ import com.myhome.net.dto.SystemUserUpdateRequest
 import com.myhome.net.dto.TaskDto
 import com.myhome.net.dto.TaskRecordDto
 import com.myhome.net.dto.TaskRequest
+import com.myhome.net.dto.GradeCreateRequest
+import com.myhome.net.dto.GradeDto
+import com.myhome.net.dto.GradeUpdateRequest
+import com.myhome.net.dto.HabitCreateRequest
+import com.myhome.net.dto.HabitDto
+import com.myhome.net.dto.HabitLogDto
+import com.myhome.net.dto.HabitUpdateRequest
+import com.myhome.net.dto.StudySessionDto
+import com.myhome.net.dto.StudySessionReportRequest
+import com.myhome.net.dto.StudyStatsDto
+import com.myhome.net.dto.TextbookTimeDto
 import com.myhome.net.dto.TtsRequest
 import com.myhome.net.dto.UpdateMemberRolesRequest
 import com.myhome.net.dto.UserInfo
@@ -441,4 +452,57 @@ interface ApiService {
 
     @POST("api/system/email-configs/{id}/test")
     suspend fun testEmailConfig(@Path("id") id: String): TestResultDto
+
+    // ---- 每日打卡（v0.17.0） ----
+    @GET("api/habits")
+    suspend fun listHabits(@Query("include_inactive") includeInactive: Boolean = false): List<HabitDto>
+
+    @POST("api/habits")
+    suspend fun createHabit(@Body body: HabitCreateRequest): HabitDto
+
+    @PUT("api/habits/{id}")
+    suspend fun updateHabit(@Path("id") id: String, @Body body: HabitUpdateRequest): HabitDto
+
+    @DELETE("api/habits/{id}")
+    suspend fun deleteHabit(@Path("id") id: String)
+
+    @POST("api/habits/{id}/log")
+    suspend fun checkInHabit(@Path("id") id: String): HabitLogDto
+
+    @GET("api/habits/logs")
+    suspend fun listHabitLogs(
+        @Query("user_id") userId: String? = null,
+        @Query("date_from") dateFrom: String? = null,
+        @Query("date_to") dateTo: String? = null,
+    ): List<HabitLogDto>
+
+    // ---- 学科成绩（v0.17.0） ----
+    @GET("api/grades")
+    suspend fun listGrades(
+        @Query("user_id") userId: String? = null,
+        @Query("subject") subject: String? = null,
+    ): List<GradeDto>
+
+    @POST("api/grades")
+    suspend fun createGrade(@Body body: GradeCreateRequest): GradeDto
+
+    @PUT("api/grades/{id}")
+    suspend fun updateGrade(@Path("id") id: String, @Body body: GradeUpdateRequest): GradeDto
+
+    @DELETE("api/grades/{id}")
+    suspend fun deleteGrade(@Path("id") id: String)
+
+    // ---- 学习时长（v0.17.0，自动埋点 + 聚合统计） ----
+    @POST("api/study-sessions")
+    suspend fun reportStudySession(@Body body: StudySessionReportRequest): StudySessionDto
+
+    @GET("api/study-sessions")
+    suspend fun listStudySessions(
+        @Query("user_id") userId: String? = null,
+        @Query("date_from") dateFrom: String? = null,
+        @Query("date_to") dateTo: String? = null,
+    ): List<StudySessionDto>
+
+    @GET("api/study-sessions/stats")
+    suspend fun getStudyStats(@Query("user_id") userId: String? = null): StudyStatsDto
 }

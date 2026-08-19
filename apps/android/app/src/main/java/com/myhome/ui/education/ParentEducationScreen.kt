@@ -22,8 +22,10 @@ import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -78,6 +80,9 @@ fun ParentEducationScreen(
     onOpenChildSkill: (String, String) -> Unit,
     onOpenSelfSkill: () -> Unit,
     onOpenSelfSession: (CourseSessionType, String) -> Unit,
+    onOpenGrades: () -> Unit,
+    onOpenStudyStats: () -> Unit,
+    onOpenHabits: () -> Unit,
     vm: ParentEducationViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(Unit) { vm.refresh() }
@@ -174,6 +179,9 @@ fun ParentEducationScreen(
                     onOpenRewards = onOpenRewards,
                     onOpenDeviceControl = onOpenDeviceControl,
                     onOpenChildSkill = onOpenChildSkill,
+                    onOpenGrades = onOpenGrades,
+                    onOpenStudyStats = onOpenStudyStats,
+                    onOpenHabits = onOpenHabits,
                 )
             }
         }
@@ -259,6 +267,9 @@ private fun EducationContent(
     onOpenRewards: () -> Unit,
     onOpenDeviceControl: () -> Unit,
     onOpenChildSkill: (String, String) -> Unit,
+    onOpenGrades: () -> Unit,
+    onOpenStudyStats: () -> Unit,
+    onOpenHabits: () -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -287,6 +298,48 @@ private fun EducationContent(
                     leading = {
                         Icon(
                             Icons.Filled.PhoneAndroid,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    },
+                    showDivider = true,
+                )
+                SettingsRow(
+                    title = "学科成绩",
+                    subtitle = "记录各科考试成绩",
+                    onClick = onOpenGrades,
+                    leading = {
+                        Icon(
+                            Icons.Filled.Grade,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    },
+                    showDivider = true,
+                )
+                SettingsRow(
+                    title = "学习时长",
+                    subtitle = "互动课程学习统计",
+                    onClick = onOpenStudyStats,
+                    leading = {
+                        Icon(
+                            Icons.Filled.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    },
+                    showDivider = true,
+                )
+                SettingsRow(
+                    title = "习惯打卡",
+                    subtitle = "习惯管理与每日打卡",
+                    onClick = onOpenHabits,
+                    leading = {
+                        Icon(
+                            Icons.Filled.CheckCircle,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp),

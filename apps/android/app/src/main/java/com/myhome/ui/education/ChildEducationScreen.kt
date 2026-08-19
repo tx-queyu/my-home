@@ -47,6 +47,7 @@ fun ChildEducationScreen(
     onOpenPoints: () -> Unit,
     onOpenRewards: () -> Unit,
     onOpenSkillCenter: () -> Unit,
+    onOpenHabits: () -> Unit,
     vm: ChildEducationViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(Unit) { vm.refresh() }
@@ -89,7 +90,15 @@ fun ChildEducationScreen(
                             MySkillCard(skill = skill, onClick = onOpenSkillCenter)
                         }
                     }
-                    // 次屏:积分卡
+                    // 次屏:每日打卡卡
+                    item {
+                        HabitCheckinCard(
+                            doneCount = state.habits.count { it.todayCheckedIn },
+                            totalCount = state.habits.count { it.isActive },
+                            onClick = onOpenHabits,
+                        )
+                    }
+                    // 三屏:积分卡
                     item {
                         PointsBalanceCard(
                             balance = state.balance,
@@ -188,6 +197,25 @@ private fun MySkillCard(skill: SkillOverviewDto, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun HabitCheckinCard(doneCount: Int, totalCount: Int, onClick: () -> Unit) {
+    SettingsCard {
+        SettingsRow(
+            title = "每日打卡",
+            subtitle = if (totalCount > 0) "今日 $doneCount/$totalCount" else "坚持养成好习惯",
+            onClick = onClick,
+            leading = {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            showDivider = false,
+        )
     }
 }
 

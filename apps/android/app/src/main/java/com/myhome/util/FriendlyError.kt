@@ -160,6 +160,13 @@ fun errorMessageFromDetail(detail: String): String = when (detail) {
     "invalid_state" -> "状态过滤参数无效"
     "invalid_mode" -> "选词模式无效"
     "invalid_textbook_filter" -> "教材过滤参数无效"
+    // 每日打卡 + 学科成绩（v0.17.0）
+    "habit_not_found" -> "习惯不存在"
+    "habit_name_taken" -> "习惯名称已存在"
+    "habit_inactive" -> "该习惯已停用"
+    "already_checked_in_today" -> "今天已打过卡"
+    "grade_not_found" -> "成绩记录不存在"
+    "score_exceeds_full" -> "分数不能超过满分"
     // TTS（Edge TTS 代理）
     "tts_empty_text" -> "合成文本为空"
     "tts_timeout" -> "语音合成超时，请重试"

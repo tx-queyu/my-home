@@ -1,11 +1,14 @@
 package com.myhome.ui.education
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.myhome.net.dto.CourseExperienceResult
+import com.myhome.net.dto.StudySessionReportRequest
 import com.myhome.net.dto.WordAssessmentResult
 import com.myhome.net.dto.WordDto
 import com.myhome.repo.CourseRepository
+import com.myhome.repo.StudySessionRepository
 import com.myhome.repo.TaskRepository
 import com.myhome.util.AudioRecorder
 import com.myhome.util.ReadingTtsPlayer
@@ -171,6 +174,10 @@ data class ReadingSessionUiState(
     val error: String? = null,
     val courseLabel: String = "",
     val courseId: String = "",
+    // v0.17.0 学习时长埋点
+    val subject: String = "",
+    val textbook: String = "",
+    val learningMethod: String = "",
     val words: List<WordDto> = emptyList(),
     val currentIndex: Int = 0,
     val phase: ReadingPhase = ReadingPhase.LOADING,
@@ -215,6 +222,7 @@ data class ReadingSessionUiState(
 class ReadingSessionViewModel @Inject constructor(
     private val repo: CourseRepository,
     private val taskRepo: TaskRepository,
+    private val studyRepo: StudySessionRepository,
     val ttsPlayer: ReadingTtsPlayer,
 ) : ViewModel() {
 
@@ -226,6 +234,9 @@ class ReadingSessionViewModel @Inject constructor(
     private var transitionJob: Job? = null
     private var recorder: AudioRecorder? = null
     private val rng = Random(System.currentTimeMillis())
+    // v0.17.0 学习时长埋点
+    private var sessionStartMs: Long? = null
+    private var sessionReported = false
 
     fun load(courseId: String, selfStudy: Boolean = false) {
         if (_ui.value.courseId == courseId && _ui.value.selfStudy == selfStudy &&
@@ -244,10 +255,15 @@ class ReadingSessionViewModel @Inject constructor(
                 val words = repo.listNextWords(courseId, limit = 20, mode = "adaptive")
                 course to words
             }.onSuccess { (course, words) ->
+                sessionStartMs = SystemClock.elapsedRealtime()
+                sessionReported = false
                 _ui.update {
                     it.copy(
                         loading = false,
                         courseLabel = "${course.textbook} · ${course.learningMethod}",
+                        subject = course.subject,
+                        textbook = course.textbook,
+                        learningMethod = course.learningMethod,
                         words = words,
                         currentIndex = 0,
                         practiceRound = 0,
@@ -282,10 +298,15 @@ class ReadingSessionViewModel @Inject constructor(
                 val task = taskRepo.get(taskId)
                 Triple(course, words, task)
             }.onSuccess { (course, words, task) ->
+                sessionStartMs = SystemClock.elapsedRealtime()
+                sessionReported = false
                 _ui.update {
                     it.copy(
                         loading = false,
                         courseLabel = "${course.textbook} · ${course.learningMethod}",
+                        subject = course.subject,
+                        textbook = course.textbook,
+                        learningMethod = course.learningMethod,
                         words = words,
                         currentIndex = 0,
                         practiceRound = 0,
@@ -689,6 +710,7 @@ class ReadingSessionViewModel @Inject constructor(
         _ui.update { it.copy(finishing = true) }
         timerJob?.cancel()
         listenJob?.cancel()
+        reportStudySession(s)
         viewModelScope.launch {
             if (naturalEnding && !s.selfStudy) {
                 runCatching { repo.experience(s.courseId) }
@@ -743,6 +765,7 @@ class ReadingSessionViewModel @Inject constructor(
         timerJob?.cancel()
         listenJob?.cancel()
         ttsPlayer.stop()
+        reportStudySession(s)
         viewModelScope.launch {
             runCatching { taskRepo.complete(taskId) }
                 .onSuccess {
@@ -825,6 +848,34 @@ class ReadingSessionViewModel @Inject constructor(
         _ui.update { it.copy(toast = null) }
     }
 
+    /** v0.17.0 学习时长埋点：session 结束时上报（自然结束 + 提前结束 + 任务完成三路径共用）。 */
+    private fun reportStudySession(s: ReadingSessionUiState) {
+        val start = sessionStartMs ?: return
+        if (sessionReported) return
+        val durationSec = ((SystemClock.elapsedRealtime() - start) / 1000).toInt()
+        if (durationSec < MIN_REPORT_SECONDS) return
+        if (s.subject.isBlank() || s.textbook.isBlank()) return
+        sessionReported = true
+        viewModelScope.launch {
+            runCatching {
+                studyRepo.report(
+                    StudySessionReportRequest(
+                        subject = s.subject,
+                        textbook = s.textbook,
+                        learningMethod = s.learningMethod,
+                        sessionType = "reading",
+                        source = when {
+                            s.taskId != null -> "task"
+                            s.selfStudy -> "self_study"
+                            else -> "experience"
+                        },
+                        durationSeconds = durationSec,
+                    )
+                )
+            }.onFailure { /* 静默 */ }
+        }
+    }
+
     override fun onCleared() {
         timerJob?.cancel()
         listenJob?.cancel()
@@ -833,5 +884,9 @@ class ReadingSessionViewModel @Inject constructor(
         recorder = null
         ttsPlayer.release()
         super.onCleared()
+    }
+
+    companion object {
+        const val MIN_REPORT_SECONDS = 10
     }
 }

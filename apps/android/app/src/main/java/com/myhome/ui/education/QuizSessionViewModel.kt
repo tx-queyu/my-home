@@ -1,10 +1,13 @@
 package com.myhome.ui.education
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.myhome.net.dto.CourseExperienceResult
+import com.myhome.net.dto.StudySessionReportRequest
 import com.myhome.net.dto.WordDto
 import com.myhome.repo.CourseRepository
+import com.myhome.repo.StudySessionRepository
 import com.myhome.repo.TaskRepository
 import com.myhome.util.ReadingTtsPlayer
 import com.myhome.util.friendlyError
@@ -38,6 +41,10 @@ data class QuizSessionUiState(
     val error: String? = null,
     val courseLabel: String = "",
     val courseId: String = "",
+    // v0.17.0 学习时长埋点
+    val subject: String = "",
+    val textbook: String = "",
+    val learningMethod: String = "",
     val words: List<WordDto> = emptyList(),
     val currentIndex: Int = 0,
     val phase: QuizPhase = QuizPhase.LOADING,
@@ -65,6 +72,7 @@ data class QuizSessionUiState(
 class QuizSessionViewModel @Inject constructor(
     private val repo: CourseRepository,
     private val taskRepo: TaskRepository,
+    private val studyRepo: StudySessionRepository,
     val ttsPlayer: ReadingTtsPlayer,
 ) : ViewModel() {
 
@@ -72,6 +80,9 @@ class QuizSessionViewModel @Inject constructor(
     val ui: StateFlow<QuizSessionUiState> = _ui.asStateFlow()
 
     private var loadedKey: String? = null
+    // v0.17.0 学习时长埋点
+    private var sessionStartMs: Long? = null
+    private var sessionReported = false
 
     fun load(courseId: String) = start(courseId, taskId = null)
 
@@ -108,10 +119,15 @@ class QuizSessionViewModel @Inject constructor(
                     }
                     return@onSuccess
                 }
+                sessionStartMs = SystemClock.elapsedRealtime()
+                sessionReported = false
                 _ui.update {
                     it.copy(
                         loading = false,
                         courseLabel = "${course.textbook} · ${course.learningMethod}",
+                        subject = course.subject,
+                        textbook = course.textbook,
+                        learningMethod = course.learningMethod,
                         words = words,
                         currentIndex = 0,
                         phase = QuizPhase.QUESTION,
@@ -162,6 +178,7 @@ class QuizSessionViewModel @Inject constructor(
         val next = s.currentIndex + 1
         if (next >= s.words.size) {
             _ui.update { it.copy(phase = QuizPhase.REPORT, answerInput = "") }
+            reportStudySession(s)
             if (s.taskId == null && !s.selfStudy) finishExperience()
         } else {
             _ui.update { it.copy(currentIndex = next, phase = QuizPhase.QUESTION, answerInput = "") }
@@ -189,6 +206,7 @@ class QuizSessionViewModel @Inject constructor(
                             earnedPoints = s.taskPoints ?: 0,
                         )
                     }
+                    reportStudySession(s)
                 }
                 .onFailure { e ->
                     _ui.update {
@@ -227,6 +245,34 @@ class QuizSessionViewModel @Inject constructor(
         _ui.update { it.copy(toast = null) }
     }
 
+    /** v0.17.0 学习时长埋点：详见 LearnSessionViewModel.reportStudySession。 */
+    private fun reportStudySession(s: QuizSessionUiState) {
+        val start = sessionStartMs ?: return
+        if (sessionReported) return
+        val durationSec = ((SystemClock.elapsedRealtime() - start) / 1000).toInt()
+        if (durationSec < MIN_REPORT_SECONDS) return
+        if (s.subject.isBlank() || s.textbook.isBlank()) return
+        sessionReported = true
+        viewModelScope.launch {
+            runCatching {
+                studyRepo.report(
+                    StudySessionReportRequest(
+                        subject = s.subject,
+                        textbook = s.textbook,
+                        learningMethod = s.learningMethod,
+                        sessionType = "quiz",
+                        source = when {
+                            s.taskId != null -> "task"
+                            s.selfStudy -> "self_study"
+                            else -> "experience"
+                        },
+                        durationSeconds = durationSec,
+                    )
+                )
+            }.onFailure { /* 静默 */ }
+        }
+    }
+
     override fun onCleared() {
         ttsPlayer.release()
         super.onCleared()
@@ -237,5 +283,6 @@ class QuizSessionViewModel @Inject constructor(
         const val SCORE_CORRECT = 100
         const val SCORE_WRONG = 0
         const val FEEDBACK_MS = 1500L
+        const val MIN_REPORT_SECONDS = 10
     }
 }

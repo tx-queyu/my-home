@@ -13,6 +13,7 @@ class PointSource(str, enum.Enum):
     task = "task"
     redemption = "redemption"
     adjustment = "adjustment"
+    checkin = "checkin"
 
 
 class PointAccount(Base, TimestampMixin):
